@@ -127,6 +127,14 @@ class TelegramPollingWorker:
     def process_updates(self, updates: List[Dict[str, Any]]) -> None:
         for update in updates:
             update_id = update.get("update_id")
-            if isinstance(update_id, int):
-                self._next_offset = update_id + 1
-            process_telegram_update(update, service=self._service, bot_client=self._bot_client)
+            try:
+                process_telegram_update(update, service=self._service, bot_client=self._bot_client)
+            except Exception as exc:
+                logger.exception(
+                    "Failed to process Telegram update %s: %s",
+                    update_id,
+                    exc,
+                )
+            finally:
+                if isinstance(update_id, int):
+                    self._next_offset = update_id + 1
