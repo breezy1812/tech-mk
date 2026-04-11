@@ -66,7 +66,7 @@ def telegram_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": True}
     except requests.RequestException as exc:
         logger.exception("Failed to handle Telegram webhook: %s", exc)
-        raise HTTPException(status_code=502, detail="Telegram reply failed") from exc
+        raise HTTPException(status_code=502, detail="Failed to process Telegram webhook") from exc
     except Exception as exc:
         logger.exception("Failed to process Telegram webhook: %s", exc)
         raise HTTPException(status_code=500, detail="Telegram processing failed") from exc
