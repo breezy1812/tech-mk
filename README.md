@@ -158,6 +158,8 @@ DISCORD_PUBLIC_KEY=your_discord_public_key
 
 > 若只先測 Telegram，可先不填 Discord 相關欄位；`APP_BASE_URL` 也可以直接填你的內網網址，例如 `http://your-internal-host:8000`。另外，`OLLAMA_MODEL` 必須和你已經 `ollama pull` 下來的模型名稱一致。
 
+若你想調整機器人的回覆風格，優先修改 `.env` 內的 `OLLAMA_SYSTEM_PROMPT`。目前預設值會偏向即時聊天風格，避免太像 Markdown 文件；如果你希望更口語，可以再明確加入像是「像真人對話，不要使用標題與條列，除非我要求」這類限制。
+
 ---
 
 ## 啟動
