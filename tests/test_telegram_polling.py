@@ -9,6 +9,8 @@ from app.telegram_polling import (
     OLLAMA_UNAVAILABLE_REPLY,
     REINDEX_DISABLED_REPLY,
     REINDEX_FORBIDDEN_REPLY,
+    SYNC_DISABLED_REPLY,
+    SYNC_FORBIDDEN_REPLY,
     TelegramPollingWorker,
     process_telegram_update,
 )
@@ -256,6 +258,123 @@ def test_process_telegram_update_reindex_disabled() -> None:
 
     assert processed is True
     assert captured["text"] == REINDEX_DISABLED_REPLY
+
+
+def test_process_telegram_update_rejects_sync_for_non_admin() -> None:
+    captured = {}
+    original_allow_reindex = settings.rag_allow_reindex
+    original_admin_users = settings.telegram_admin_user_ids
+
+    class FakeBotClient:
+        def send_message(self, chat_id: str, text: str) -> None:
+            captured["text"] = text
+
+    try:
+        settings.rag_allow_reindex = True
+        settings.telegram_admin_user_ids = "999"
+        processed = process_telegram_update(
+            {
+                "update_id": 1008,
+                "message": {
+                    "message_id": 9,
+                    "text": "/sync",
+                    "from": {"id": 123},
+                    "chat": {"id": 456},
+                },
+            },
+            service=object(),
+            bot_client=FakeBotClient(),
+            indexing_service=object(),
+        )
+    finally:
+        settings.rag_allow_reindex = original_allow_reindex
+        settings.telegram_admin_user_ids = original_admin_users
+
+    assert processed is True
+    assert captured["text"] == SYNC_FORBIDDEN_REPLY
+
+
+def test_process_telegram_update_sync_disabled() -> None:
+    captured = {}
+    original_allow_reindex = settings.rag_allow_reindex
+
+    class FakeBotClient:
+        def send_message(self, chat_id: str, text: str) -> None:
+            captured["text"] = text
+
+    try:
+        settings.rag_allow_reindex = False
+        processed = process_telegram_update(
+            {
+                "update_id": 1009,
+                "message": {
+                    "message_id": 10,
+                    "text": "/sync",
+                    "from": {"id": 123},
+                    "chat": {"id": 456},
+                },
+            },
+            service=object(),
+            bot_client=FakeBotClient(),
+            indexing_service=object(),
+        )
+    finally:
+        settings.rag_allow_reindex = original_allow_reindex
+
+    assert processed is True
+    assert captured["text"] == SYNC_DISABLED_REPLY
+
+
+def test_process_telegram_update_runs_sync_for_admin() -> None:
+    captured = {}
+    original_allow_reindex = settings.rag_allow_reindex
+    original_admin_users = settings.telegram_admin_user_ids
+
+    class FakeIndexingService:
+        def sync_index(self) -> IndexingReport:
+            return IndexingReport(
+                mode="sync",
+                collection_name="tech_docs",
+                embedding_model="fake-embed",
+                docs_root="data/docs",
+                files_processed=3,
+                chunks_indexed=2,
+                files_indexed=1,
+                files_unchanged=1,
+                files_deleted=1,
+                files=[],
+                failed_files=[],
+                indexed_at=datetime.now(timezone.utc),
+            )
+
+    class FakeBotClient:
+        def send_message(self, chat_id: str, text: str) -> None:
+            captured["text"] = text
+
+    try:
+        settings.rag_allow_reindex = True
+        settings.telegram_admin_user_ids = "123"
+        processed = process_telegram_update(
+            {
+                "update_id": 1010,
+                "message": {
+                    "message_id": 11,
+                    "text": "/sync",
+                    "from": {"id": 123},
+                    "chat": {"id": 456},
+                },
+            },
+            service=object(),
+            bot_client=FakeBotClient(),
+            indexing_service=FakeIndexingService(),
+        )
+    finally:
+        settings.rag_allow_reindex = original_allow_reindex
+        settings.telegram_admin_user_ids = original_admin_users
+
+    assert processed is True
+    assert "增量同步完成" in captured["text"]
+    assert "更新檔案: 1" in captured["text"]
 
 
 def test_process_telegram_update_runs_reindex_for_admin() -> None:

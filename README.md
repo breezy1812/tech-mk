@@ -11,6 +11,8 @@
 
 > 目前 repo 已完成 Phase 1 聊天骨架，以及 Phase 2 的 indexing 與 query 主鏈路，包含 `/rag/query` 與 Telegram `/askdoc` 整合。
 
+最常用的 Telegram / API 指令整理在 [COMMANDS.md](/home/mads/tech-mk/COMMANDS.md)。
+
 ---
 
 ## 架構
@@ -67,7 +69,7 @@ Telegram / Discord
 - `/rag/reindex` 全量重建單一 `tech_docs` collection
 - `/rag/sync` 只同步新增、修改、刪除的文件變更
 - Telegram bot 長輪詢（long polling）收訊與回覆
-- Telegram `/askdoc`、`/ragstatus`、`/reindex`
+- Telegram `/askdoc`、`/ragstatus`、`/reindex`、`/sync`
 - `/webhook/discord` 接 Discord 訊息
 - 同步呼叫 Ollama `/api/chat`
 - 本地文件 loader：`.md`、`.txt`、`.pdf`、`.docx`
