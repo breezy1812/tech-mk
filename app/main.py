@@ -1,7 +1,9 @@
+import logging
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict
 
-from fastapi import FastAPI
+import requests
+from fastapi import FastAPI, HTTPException
 
 from app.config import settings
 from app.connectors.discord_handler import DiscordParser
@@ -11,6 +13,7 @@ from app.service import ChatService
 from app.telegram_polling import TelegramBotClient, TelegramPollingWorker, process_telegram_update
 
 setup_logging(settings.log_level)
+logger = logging.getLogger(__name__)
 service = ChatService()
 telegram_client = TelegramBotClient()
 telegram_poller = TelegramPollingWorker(service=service, bot_client=telegram_client)
@@ -57,9 +60,13 @@ def chat(request: ChatRequest) -> ChatResponse:
 
 @app.post("/webhook/telegram")
 def telegram_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
-    if not process_telegram_update(payload, service=service, bot_client=telegram_client):
-        return {"ok": True, "skipped": True}
-    return {"ok": True}
+    try:
+        if not process_telegram_update(payload, service=service, bot_client=telegram_client):
+            return {"ok": True, "skipped": True}
+        return {"ok": True}
+    except requests.RequestException as exc:
+        logger.exception("Failed to handle Telegram webhook: %s", exc)
+        raise HTTPException(status_code=502, detail="Telegram reply failed") from exc
 
 
 @app.post("/webhook/discord")

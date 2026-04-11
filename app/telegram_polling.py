@@ -3,7 +3,6 @@ import threading
 from typing import Any, Dict, List, Optional
 
 import requests
-from fastapi import HTTPException
 
 from app.config import settings
 from app.connectors.telegram_handler import TelegramParser
@@ -49,17 +48,12 @@ class TelegramBotClient:
             return
 
         payload = {"chat_id": chat_id, "text": text}
-
-        try:
-            response = requests.post(
-                f"{self._base_url}/sendMessage",
-                json=payload,
-                timeout=20,
-            )
-            response.raise_for_status()
-        except requests.RequestException as exc:
-            logger.exception("Failed to send Telegram message: %s", exc)
-            raise HTTPException(status_code=502, detail="Telegram reply failed") from exc
+        response = requests.post(
+            f"{self._base_url}/sendMessage",
+            json=payload,
+            timeout=20,
+        )
+        response.raise_for_status()
 
 
 def process_telegram_update(

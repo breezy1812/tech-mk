@@ -97,7 +97,7 @@ cp .env.example .env
 ```env
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=gemma3:4b
-APP_BASE_URL=http://10.11.12.99:8000
+APP_BASE_URL=http://your-internal-host:8000
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 TELEGRAM_POLLING_ENABLED=true
 TELEGRAM_POLLING_TIMEOUT_SECONDS=30
@@ -107,7 +107,7 @@ DISCORD_BOT_TOKEN=your_discord_bot_token
 DISCORD_PUBLIC_KEY=your_discord_public_key
 ```
 
-> 若只先測 Telegram，可先不填 Discord 相關欄位；`APP_BASE_URL` 也可以直接填你的內網網址，例如 `http://10.11.12.99:8000`。
+> 若只先測 Telegram，可先不填 Discord 相關欄位；`APP_BASE_URL` 也可以直接填你的內網網址，例如 `http://your-internal-host:8000`。
 
 ---
 
@@ -233,11 +233,11 @@ git push -u origin main
 
 ## 內網部署建議
 
-如果你的 KM 只想活在內網，例如 `10.11.12.99`：
+如果你的 KM 只想活在內網，例如 `your-internal-host`：
 
 - Telegram 只需要讓主機能連外到 `api.telegram.org`
 - 不需要讓 Telegram 主動打進你的內網
-- 可直接在內網用 `http://10.11.12.99:8000` 提供 `/health`、`/chat`、`/config/check`
+- 可直接在內網用 `http://your-internal-host:8000` 提供 `/health`、`/chat`、`/config/check`
 - 若之後還要接 Discord 或其他 webhook 型平台，再另外加公開 HTTPS reverse proxy
 
 > Telegram polling 模式建議只跑 **單一應用實例**，避免多個程序同時抓取同一個 bot 的 updates。
