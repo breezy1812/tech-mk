@@ -4,7 +4,7 @@
 
 - 本地 Ollama 模型對話
 - FastAPI 後端
-- Telegram webhook
+- Telegram polling
 - Discord webhook
 - 統一訊息入口與回覆流程
 - 基本健康檢查與設定管理
@@ -62,7 +62,7 @@ Telegram / Discord
 - `/health` 健康檢查
 - `/config/check` 設定檢查
 - `/chat` 直接測試 API
-- `/webhook/telegram` 接 Telegram 訊息
+- Telegram bot 長輪詢（long polling）收訊與回覆
 - `/webhook/discord` 接 Discord 訊息
 - 同步呼叫 Ollama `/api/chat`
 
@@ -97,13 +97,17 @@ cp .env.example .env
 ```env
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=gemma3:4b
-APP_BASE_URL=https://your-domain.example.com
+APP_BASE_URL=http://10.11.12.99:8000
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_POLLING_ENABLED=true
+TELEGRAM_POLLING_TIMEOUT_SECONDS=30
+TELEGRAM_POLLING_LIMIT=100
+TELEGRAM_POLLING_RETRY_DELAY_SECONDS=5
 DISCORD_BOT_TOKEN=your_discord_bot_token
 DISCORD_PUBLIC_KEY=your_discord_public_key
 ```
 
-> 若只先測 Telegram，可先不填 Discord 相關欄位。
+> 若只先測 Telegram，可先不填 Discord 相關欄位；`APP_BASE_URL` 也可以直接填你的內網網址，例如 `http://10.11.12.99:8000`。
 
 ---
 
@@ -133,19 +137,18 @@ curl -X POST http://127.0.0.1:8000/chat \
 
 ---
 
-## Telegram webhook 設定
+## Telegram polling 設定
 
-先確認你的服務可被 Telegram 存取，例如：
+1. 在 Telegram 用 `@BotFather` 建立 bot。
+2. 取得 bot token，填入 `.env` 的 `TELEGRAM_BOT_TOKEN`。
+3. 確認你的 KM 主機可以對外連到 `https://api.telegram.org`。
+4. 直接啟動服務即可，**不需要設定 webhook**。
 
-```text
-https://your-domain.example.com/webhook/telegram
-```
-
-設定 webhook：
+若你曾經替同一個 bot 設定過 webhook，建議先清掉：
 
 ```bash
-curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
-  -d "url=https://your-domain.example.com/webhook/telegram"
+curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/deleteWebhook" \
+  -d "drop_pending_updates=false"
 ```
 
 ---
@@ -178,8 +181,8 @@ Phase 1 先建議用最簡單方式：
 - Ubuntu server
 - Python venv
 - systemd
-- Nginx reverse proxy
-- HTTPS
+- Telegram 採 outbound polling，不需要對 Telegram 開公開 webhook
+- 若要接 Discord，再額外配置 Nginx reverse proxy + HTTPS
 
 後續再考慮：
 
@@ -225,6 +228,19 @@ git remote add origin <your-repo-url>
 git branch -M main
 git push -u origin main
 ```
+
+---
+
+## 內網部署建議
+
+如果你的 KM 只想活在內網，例如 `10.11.12.99`：
+
+- Telegram 只需要讓主機能連外到 `api.telegram.org`
+- 不需要讓 Telegram 主動打進你的內網
+- 可直接在內網用 `http://10.11.12.99:8000` 提供 `/health`、`/chat`、`/config/check`
+- 若之後還要接 Discord 或其他 webhook 型平台，再另外加公開 HTTPS reverse proxy
+
+> Telegram polling 模式建議只跑 **單一應用實例**，避免多個程序同時抓取同一個 bot 的 updates。
 
 ---
 

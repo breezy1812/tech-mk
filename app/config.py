@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     )
 
     telegram_bot_token: str = ""
+    telegram_polling_enabled: bool = True
+    telegram_polling_timeout_seconds: int = 30
+    telegram_polling_limit: int = 100
+    telegram_polling_retry_delay_seconds: int = 5
     discord_bot_token: str = ""
     discord_public_key: str = ""
 
