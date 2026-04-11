@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 # Keep the HTTP client timeout slightly above Telegram long-polling timeout
 # so the local request doesn't expire before Telegram responds.
 POLLING_TIMEOUT_BUFFER_SECONDS = 10
+MAX_TELEGRAM_HTTP_TIMEOUT_SECONDS = 60
+MAX_TELEGRAM_JOIN_TIMEOUT_SECONDS = 60
 
 
 class TelegramBotClient:
@@ -32,7 +34,10 @@ class TelegramBotClient:
         response = requests.get(
             f"{self._base_url}/getUpdates",
             params=payload,
-            timeout=settings.telegram_polling_timeout_seconds + POLLING_TIMEOUT_BUFFER_SECONDS,
+            timeout=min(
+                settings.telegram_polling_timeout_seconds + POLLING_TIMEOUT_BUFFER_SECONDS,
+                MAX_TELEGRAM_HTTP_TIMEOUT_SECONDS,
+            ),
         )
         response.raise_for_status()
 
@@ -108,7 +113,10 @@ class TelegramPollingWorker:
 
         self._stop_event.set()
         thread.join(
-            timeout=settings.telegram_polling_timeout_seconds + POLLING_TIMEOUT_BUFFER_SECONDS
+            timeout=min(
+                settings.telegram_polling_timeout_seconds + POLLING_TIMEOUT_BUFFER_SECONDS,
+                MAX_TELEGRAM_JOIN_TIMEOUT_SECONDS,
+            )
         )
         self._thread = None
         logger.info("Telegram polling worker stopped.")
@@ -137,6 +145,8 @@ class TelegramPollingWorker:
                     exc,
                 )
             finally:
+                # Advance offset even after a failed update so one bad payload
+                # does not block all later messages in the queue.
                 if isinstance(update_id, int):
                     self._next_offset = update_id + 1
 

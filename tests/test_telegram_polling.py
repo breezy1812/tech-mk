@@ -54,6 +54,7 @@ def test_polling_worker_advances_offset_for_each_update() -> None:
             {
                 "update_id": 10,
                 "message": {
+                    "message_id": 2,
                     "text": "one",
                     "from": {"id": 1},
                     "chat": {"id": 11},
@@ -62,6 +63,7 @@ def test_polling_worker_advances_offset_for_each_update() -> None:
             {
                 "update_id": 11,
                 "message": {
+                    "message_id": 3,
                     "text": "two",
                     "from": {"id": 2},
                     "chat": {"id": 22},
