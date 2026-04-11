@@ -109,7 +109,7 @@ ollama serve
 
 ### 2. 下載要給專案使用的模型
 
-本專案預設模型在 `/home/runner/work/tech-mk/tech-mk/.env.example` 設為：
+本專案在 repo 根目錄的 `.env.example` 預設為：
 
 ```env
 OLLAMA_MODEL=gemma3:4b
