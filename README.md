@@ -144,6 +144,8 @@ curl -X POST http://127.0.0.1:8000/chat \
 3. 確認你的 KM 主機可以對外連到 `https://api.telegram.org`。
 4. 直接啟動服務即可，**不需要設定 webhook**。
 
+> Telegram polling 模式建議只跑 **單一應用實例**，避免多個程序同時抓取同一個 bot 的 updates。
+
 若你曾經替同一個 bot 設定過 webhook，建議先清掉：
 
 ```bash
@@ -239,8 +241,6 @@ git push -u origin main
 - 不需要讓 Telegram 主動打進你的內網
 - 可直接在內網用 `http://your-internal-host:8000` 提供 `/health`、`/chat`、`/config/check`
 - 若之後還要接 Discord 或其他 webhook 型平台，再另外加公開 HTTPS reverse proxy
-
-> Telegram polling 模式建議只跑 **單一應用實例**，避免多個程序同時抓取同一個 bot 的 updates。
 
 ---
 

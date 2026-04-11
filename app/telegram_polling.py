@@ -9,6 +9,7 @@ from app.connectors.telegram_handler import TelegramParser
 from app.service import ChatService
 
 logger = logging.getLogger(__name__)
+POLLING_TIMEOUT_BUFFER_SECONDS = 10
 
 
 class TelegramBotClient:
@@ -29,7 +30,7 @@ class TelegramBotClient:
         response = requests.get(
             f"{self._base_url}/getUpdates",
             params=payload,
-            timeout=settings.telegram_polling_timeout_seconds + 10,
+            timeout=settings.telegram_polling_timeout_seconds + POLLING_TIMEOUT_BUFFER_SECONDS,
         )
         response.raise_for_status()
 
@@ -105,7 +106,9 @@ class TelegramPollingWorker:
             return
 
         self._stop_event.set()
-        thread.join(timeout=settings.telegram_polling_timeout_seconds + 10)
+        thread.join(
+            timeout=settings.telegram_polling_timeout_seconds + POLLING_TIMEOUT_BUFFER_SECONDS
+        )
         self._thread = None
         logger.info("Telegram polling worker stopped.")
 
