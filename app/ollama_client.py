@@ -5,6 +5,10 @@ import requests
 from app.config import settings
 
 
+class OllamaUnavailableError(RuntimeError):
+    pass
+
+
 class OllamaClient:
     def __init__(self) -> None:
         self.base_url = settings.ollama_base_url.rstrip("/")
@@ -21,12 +25,16 @@ class OllamaClient:
                 {"role": "user", "content": user_text},
             ],
         }
-        response = requests.post(
-            f"{self.base_url}/api/chat",
-            json=payload,
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/chat",
+                json=payload,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise OllamaUnavailableError(f"Failed to reach Ollama at {self.base_url}") from exc
+
         data = response.json()
         return {
             "reply": data.get("message", {}).get("content", ""),

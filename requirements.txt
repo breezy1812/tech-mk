@@ -5,3 +5,5 @@ pydantic==2.11.7
 pydantic-settings==2.10.1
 python-dotenv==1.1.1
 pytest==8.4.1
+# Required by FastAPI/Starlette TestClient during pytest runs.
+httpx==0.28.1

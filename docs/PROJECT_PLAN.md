@@ -54,7 +54,7 @@ Phase 1 Tech Knowledge Manager Starter
 - FastAPI 應用主體
 - Ollama client
 - 訊息標準化模型
-- Telegram webhook handler
+- Telegram polling handler
 - Discord webhook handler
 - 統一 message router
 - 基礎 logging
@@ -165,9 +165,10 @@ repo 結構保持乾淨，便於之後加上 lint、test、Docker 與 CI/CD。
 - 關閉 streaming
 - 設定 timeout
 
-### 風險 2：Webhook 除錯困難
+### 風險 2：聊天平台串接除錯困難
 對策：
 - 保留 `/chat` 本地測試入口
+- Telegram 優先採 polling，減少公開 webhook 依賴
 - 先本地 curl 驗證，再接外部平台
 
 ### 風險 3：Discord 流程較繁瑣
