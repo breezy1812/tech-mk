@@ -254,6 +254,81 @@ curl -X POST http://127.0.0.1:8000/rag/query \
 
 只有 `debug=true` 才會額外附上 `retrieved_chunks`。
 
+## RAG 流程說明
+
+目前這套 RAG 不是每次提問都把所有原始文件重新讀一遍，而是分成兩段：
+
+- 建索引時：把支援的文件完整讀入、切塊、做 embedding、寫進 Chroma
+- 查詢時：只把問題做 embedding，從 Chroma 撈出最相關的 top-k chunks，再交給 LLM 生成答案
+
+也就是說：
+
+- `/rag/reindex` 會重新處理整批文件
+- `/rag/query` 不會重新全文掃描所有文件
+- `/rag/query` 只會使用查回來的相關 chunks，而不是整份文件全文
+
+### 流程圖
+
+```mermaid
+flowchart TD
+  A[文件放入 data/docs] --> B[Loader 讀取 .md .txt .pdf .docx]
+  B --> C[TextChunker 切成 chunks]
+  C --> D[EmbeddingClient 產生每個 chunk 的 embedding]
+  D --> E[Chroma 儲存 chunk 與向量]
+
+  Q[使用者問題] --> R[EmbeddingClient 產生 query embedding]
+  R --> S[Chroma 查 top-k 相關 chunks]
+  S --> T[RAGPromptBuilder 組 prompt]
+  T --> U[Ollama chat 生成答案]
+  S --> V[整理 sources]
+  U --> W[/rag/query 回傳 answer]
+  V --> W
+```
+
+### 詳細解釋
+
+#### 1. 建索引階段
+
+這一段由 [app/services/indexing_service.py](/home/mads/tech-mk/app/services/indexing_service.py) 負責。
+
+系統會掃描 `RAG_DOCS_ROOT` 底下所有支援格式的文件，逐份做以下事情：
+
+1. 用 loader 讀出原始文字
+2. 切成多個 chunks
+3. 為每個 chunk 建立 embedding
+4. 把 chunk 內容與對應 embedding 寫進 Chroma
+
+所以在 reindex 時，確實是把每份文件都完整處理過一次。
+
+#### 2. 查詢階段
+
+這一段主要由 [app/services/rag_service.py](/home/mads/tech-mk/app/services/rag_service.py) 串起來。
+
+當你呼叫 `/rag/query` 時，系統不會再把 docs root 裡所有原始文件整批重讀一次，而是：
+
+1. 先把你的問題轉成 query embedding
+2. 從 Chroma 撈出最相關的 top-k chunks
+3. 把這些 chunks 組進 RAG prompt
+4. 呼叫 Ollama 生成答案
+5. 回傳 `answer` 與 `sources`
+
+因此目前的成本主要是：
+
+- reindex 時花一次較多時間
+- query 時只查向量庫與少量相關 chunks
+
+#### 3. 目前策略的特性
+
+目前 repo 採的是簡化且穩定的做法：
+
+- 單一 docs root
+- 單一 collection：`tech_docs`
+- 全量重建索引
+- 不做 incremental sync
+- 不做 hybrid retrieval 或 reranker
+
+這樣的好處是行為單純、容易驗證；缺點是每次 reindex 都會整批重建。
+
 ### Telegram 指令
 
 Phase 2B 完成後，Telegram 目前支援：
