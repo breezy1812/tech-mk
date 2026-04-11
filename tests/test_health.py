@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import ChatResponse
+from app.models import ChatResponse, NormalizedMessage
 from app.telegram_polling import TelegramPollingWorker, process_telegram_update
 
 
@@ -26,7 +26,7 @@ def test_process_telegram_update_sends_reply() -> None:
     captured = {}
 
     class FakeService:
-        def handle_message(self, message):  # type: ignore[no-untyped-def]
+        def handle_message(self, message: NormalizedMessage) -> ChatResponse:
             captured["message"] = message
             return ChatResponse(reply="pong", model="test-model")
 
@@ -57,7 +57,7 @@ def test_process_telegram_update_sends_reply() -> None:
 
 def test_polling_worker_advances_offset_for_each_update() -> None:
     class FakeService:
-        def handle_message(self, message):  # type: ignore[no-untyped-def]
+        def handle_message(self, message: NormalizedMessage) -> ChatResponse:
             return ChatResponse(reply=f"echo:{message.text}", model="test-model")
 
     class FakeBotClient:
