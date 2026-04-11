@@ -1,4 +1,4 @@
-# Phase 1 Tech Knowledge Manager
+# Phase 1-2A Tech Knowledge Manager
 
 這是一個可直接轉移到 Git 的 Phase 1 starter repo，目標是先完成：
 
@@ -9,7 +9,7 @@
 - 統一訊息入口與回覆流程
 - 基本健康檢查與設定管理
 
-> Phase 1 重點不是做完整 agent，而是先把聊天中間層穩定建立起來。
+> 目前 repo 已完成 Phase 1 聊天骨架，並開始進入 Phase 2A：先把文件 indexing 與可觀測性接上，再處理 retrieval 與 bot 查詢整合。
 
 ---
 
@@ -62,17 +62,21 @@ Telegram / Discord
 - `/health` 健康檢查
 - `/config/check` 設定檢查
 - `/chat` 直接測試 API
+- `/rag/status` 檢查目前 collection 與最近一次 indexing 報表
+- `/rag/reindex` 全量重建單一 `tech_docs` collection
 - Telegram bot 長輪詢（long polling）收訊與回覆
 - `/webhook/discord` 接 Discord 訊息
 - 同步呼叫 Ollama `/api/chat`
+- 本地文件 loader：`.md`、`.txt`、`.pdf`、`.docx`
+- 簡單可預測 chunking 與 indexing 報表輸出
 
 ### 暫不包含
-- 向量資料庫
-- 文件 ingestion
+- `/rag/query`
 - tool calling
 - 多代理
 - 長期記憶
 - streaming
+- hybrid retrieval / reranker
 
 ---
 
@@ -152,13 +156,25 @@ TELEGRAM_POLLING_ENABLED=true
 TELEGRAM_POLLING_TIMEOUT_SECONDS=30
 TELEGRAM_POLLING_LIMIT=100
 TELEGRAM_POLLING_RETRY_DELAY_SECONDS=5
+TELEGRAM_ADMIN_USER_IDS=
 DISCORD_BOT_TOKEN=your_discord_bot_token
 DISCORD_PUBLIC_KEY=your_discord_public_key
+RAG_DOCS_ROOT=data/docs
+RAG_VECTOR_STORE_PATH=data/vector_store
+RAG_COLLECTION_NAME=tech_docs
+RAG_EMBEDDING_MODEL=nomic-embed-text
+RAG_ALLOW_REINDEX=false
 ```
 
 > 若只先測 Telegram，可先不填 Discord 相關欄位；`APP_BASE_URL` 也可以直接填你的內網網址，例如 `http://your-internal-host:8000`。另外，`OLLAMA_MODEL` 必須和你已經 `ollama pull` 下來的模型名稱一致。
 
 若你想調整機器人的回覆風格，優先修改 `.env` 內的 `OLLAMA_SYSTEM_PROMPT`。目前預設值會偏向即時聊天風格，避免太像 Markdown 文件；如果你希望更口語，可以再明確加入像是「像真人對話，不要使用標題與條列，除非我要求」這類限制。
+
+若你要使用 Phase 2A indexing，還需要先拉 embedding model：
+
+```bash
+ollama pull nomic-embed-text
+```
 
 ---
 
@@ -173,6 +189,29 @@ bash run_local.sh
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
+
+## Phase 2A Indexing
+
+目前採固定策略：
+
+- 單一 docs root：`data/docs`
+- 單一 collection：`tech_docs`
+- 全量重建：每次 `/rag/reindex` 都重建整個 collection
+
+可先把文件放進 `data/docs`，再用以下方式重建索引：
+
+```bash
+.venv/bin/python scripts/reindex.py
+```
+
+或透過 API：
+
+```bash
+curl -X POST http://127.0.0.1:8000/rag/reindex
+curl http://127.0.0.1:8000/rag/status
+```
+
+`/rag/reindex` 預設受 `RAG_ALLOW_REINDEX` 保護；若你要讓 API 端可直接重建，需在 `.env` 內明確打開。
 
 ---
 

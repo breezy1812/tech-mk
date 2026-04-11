@@ -25,10 +25,28 @@ class Settings(BaseSettings):
     telegram_polling_timeout_seconds: int = 30
     telegram_polling_limit: int = 100
     telegram_polling_retry_delay_seconds: int = 5
+    telegram_admin_user_ids: str = ""
     discord_bot_token: str = ""
     discord_public_key: str = ""
 
+    rag_enabled: bool = True
+    rag_docs_root: str = "data/docs"
+    rag_vector_store_path: str = "data/vector_store"
+    rag_collection_name: str = "tech_docs"
+    rag_chunk_size: int = 800
+    rag_chunk_overlap: int = 120
+    rag_top_k: int = 3
+    rag_embedding_model: str = "nomic-embed-text"
+    rag_embedding_timeout_seconds: int = 60
+    rag_allow_reindex: bool = False
+    rag_query_debug_default: bool = False
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @property
+    def telegram_admin_user_id_set(self) -> set[str]:
+        values = [value.strip() for value in self.telegram_admin_user_ids.split(",")]
+        return {value for value in values if value}
 
 
 settings = Settings()

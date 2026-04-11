@@ -7,3 +7,6 @@ python-dotenv==1.1.1
 pytest==8.4.1
 # Required by FastAPI/Starlette TestClient during pytest runs.
 httpx==0.28.1
+chromadb==1.0.8
+pypdf==5.4.0
+python-docx==1.1.2
