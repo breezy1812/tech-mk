@@ -9,6 +9,8 @@ from app.connectors.telegram_handler import TelegramParser
 from app.service import ChatService
 
 logger = logging.getLogger(__name__)
+# Keep the HTTP client timeout slightly above Telegram long-polling timeout
+# so the local request doesn't expire before Telegram responds.
 POLLING_TIMEOUT_BUFFER_SECONDS = 10
 
 
@@ -95,7 +97,6 @@ class TelegramPollingWorker:
         self._thread = threading.Thread(
             target=self.run,
             name="telegram-polling-worker",
-            daemon=True,
         )
         self._thread.start()
         logger.info("Telegram polling worker started.")
@@ -138,3 +139,7 @@ class TelegramPollingWorker:
             finally:
                 if isinstance(update_id, int):
                     self._next_offset = update_id + 1
+
+    @property
+    def next_offset(self) -> Optional[int]:
+        return self._next_offset

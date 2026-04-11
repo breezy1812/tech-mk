@@ -70,5 +70,5 @@ def test_polling_worker_advances_offset_for_each_update() -> None:
         ]
     )
 
-    assert worker._next_offset == 12
+    assert worker.next_offset == 12
     assert bot_client.sent_messages == [("11", "echo:one"), ("22", "echo:two")]
