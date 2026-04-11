@@ -12,6 +12,52 @@
 
 ---
 
+# 0. 目前進度摘要
+
+## 0.1 Phase 2A 已完成什麼
+
+簡白地說，Phase 2A 目前已經把「文件進系統並建立索引」這一段打通了。
+
+也就是說，現在系統已經可以：
+
+* 讀取本地文件
+* 把文件切成較小片段
+* 為這些片段產生 embedding
+* 把結果寫進 Chroma 向量資料庫
+* 透過 API 查看目前索引狀態
+* 透過 API 重新建立整份文件索引
+
+目前已完成並驗證的重點如下：
+
+* 已建立 Phase 2 的基本模組結構：`api/routes`、`services`、`adapters`、`domain/schemas`、`ingestion`
+* 已實作文件 loader，支援 `.md`、`.txt`、`.pdf`、`.docx`
+* 已實作簡單可預測的 chunking 規則
+* 已接上 Ollama embedding model
+* 已接上 Chroma，並固定使用單一 collection：`tech_docs`
+* 已實作 `/rag/status`
+* 已實作 `/rag/reindex`
+* 已實作 indexing report，方便 debug 每次重建索引的結果
+* 已提供 `scripts/reindex.py` 供手動重建索引
+
+目前手動驗證的結果是：至少三種文件格式已成功完成載入、切塊、embedding 與寫入向量庫。
+
+## 0.2 這一階段還沒做什麼
+
+Phase 2A 的重點是先確認資料流正確，所以以下內容還不算完成：
+
+* 還沒有完成 `/rag/query`
+* 還沒有完成 retrieval top-k 查詢流程
+* 還沒有完成 RAG prompt 組裝與答案生成
+* 還沒有完成 Telegram `/askdoc`
+* 還沒有完成回答附來源的完整查詢體驗
+
+換句話說：
+
+> **Phase 2A 已經完成「把知識放進去」。**
+> **Phase 2B 才是完成「把知識查出來並回答」。**
+
+---
+
 # 1. Phase 2 目標
 
 ## 1.1 核心目標
