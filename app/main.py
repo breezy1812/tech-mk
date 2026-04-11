@@ -1,23 +1,29 @@
-import logging
-from typing import Any, Dict
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Dict
 
 from fastapi import FastAPI
 
 from app.config import settings
 from app.connectors.discord_handler import DiscordParser
-from app.connectors.telegram_handler import TelegramParser
 from app.logging_setup import setup_logging
 from app.models import ChatRequest, ChatResponse, NormalizedMessage
 from app.service import ChatService
 from app.telegram_polling import TelegramBotClient, TelegramPollingWorker, process_telegram_update
 
 setup_logging(settings.log_level)
-logger = logging.getLogger(__name__)
-
-app = FastAPI(title=settings.app_name)
 service = ChatService()
 telegram_client = TelegramBotClient()
 telegram_poller = TelegramPollingWorker(service=service, bot_client=telegram_client)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    telegram_poller.start()
+    yield
+    telegram_poller.stop()
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 
 @app.get("/health")
@@ -35,16 +41,6 @@ def config_check() -> Dict[str, Any]:
         "discord_configured": bool(settings.discord_bot_token),
         "app_base_url": settings.app_base_url,
     }
-
-
-@app.on_event("startup")
-def startup_event() -> None:
-    telegram_poller.start()
-
-
-@app.on_event("shutdown")
-def shutdown_event() -> None:
-    telegram_poller.stop()
 
 
 @app.post("/chat", response_model=ChatResponse)
