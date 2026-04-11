@@ -41,20 +41,46 @@
 
 目前手動驗證的結果是：至少三種文件格式已成功完成載入、切塊、embedding 與寫入向量庫。
 
-## 0.2 這一階段還沒做什麼
+## 0.2 Phase 2B 已完成什麼
 
-Phase 2A 的重點是先確認資料流正確，所以以下內容還不算完成：
+簡白地說，Phase 2B 目前已經把「把已經建立好的知識索引查出來並回答」這一段打通了。
 
-* 還沒有完成 `/rag/query`
-* 還沒有完成 retrieval top-k 查詢流程
-* 還沒有完成 RAG prompt 組裝與答案生成
-* 還沒有完成 Telegram `/askdoc`
-* 還沒有完成回答附來源的完整查詢體驗
+也就是說，現在系統已經可以：
 
-換句話說：
+* 針對使用者問題做 query embedding
+* 從 Chroma 取回 top-k 相關 chunks
+* 使用 RAG 專用 prompt 組裝上下文
+* 在 retrieval 有結果時呼叫 Ollama 產生答案
+* 在 retrieval 無結果時直接保守回答，不呼叫 LLM
+* 回傳整理過的 `sources` 給 API 或產品層使用
+* 在 debug 模式下額外輸出 `retrieved_chunks`
+* 透過 Telegram `/askdoc` 查詢知識庫
+* 透過 Telegram `/ragstatus` 查看索引狀態
+* 透過 Telegram `/reindex` 重建索引
+
+目前已完成並驗證的重點如下：
+
+* 已實作 retrieval service 與 `vector_store.query()` 查詢契約
+* 已實作 RAG 專用 prompt builder，並與一般 `/chat` prompt 分離
+* 已實作 rag service orchestration
+* 已實作 `/rag/query`
+* 已完成業務上查無資料與真正 backend failure 的分流
+* 已完成 Telegram `/askdoc`、`/ragstatus`、`/reindex` 的薄層整合
+* 已新增 retrieval、rag service、rag API、telegram routing 測試
+
+## 0.3 目前仍未納入範圍
+
+雖然 Phase 2 的主鏈路已完成，但以下內容仍不在本階段範圍內：
+
+* reranker
+* hybrid retrieval
+* metadata filter 查詢
+* background reindex job
+* 完整 orchestration framework
+* 多 agent
 
 > **Phase 2A 已經完成「把知識放進去」。**
-> **Phase 2B 才是完成「把知識查出來並回答」。**
+> **Phase 2B 已經完成「把知識查出來並回答」。**
 
 ---
 

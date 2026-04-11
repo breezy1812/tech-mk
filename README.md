@@ -1,4 +1,4 @@
-# Phase 1-2A Tech Knowledge Manager
+# Phase 1-2B Tech Knowledge Manager
 
 這是一個可直接轉移到 Git 的 Phase 1 starter repo，目標是先完成：
 
@@ -9,7 +9,7 @@
 - 統一訊息入口與回覆流程
 - 基本健康檢查與設定管理
 
-> 目前 repo 已完成 Phase 1 聊天骨架，並開始進入 Phase 2A：先把文件 indexing 與可觀測性接上，再處理 retrieval 與 bot 查詢整合。
+> 目前 repo 已完成 Phase 1 聊天骨架，以及 Phase 2 的 indexing 與 query 主鏈路，包含 `/rag/query` 與 Telegram `/askdoc` 整合。
 
 ---
 
@@ -62,16 +62,19 @@ Telegram / Discord
 - `/health` 健康檢查
 - `/config/check` 設定檢查
 - `/chat` 直接測試 API
+- `/rag/query` 根據知識庫內容回答問題，並回傳來源清單
 - `/rag/status` 檢查目前 collection 與最近一次 indexing 報表
 - `/rag/reindex` 全量重建單一 `tech_docs` collection
 - Telegram bot 長輪詢（long polling）收訊與回覆
+- Telegram `/askdoc`、`/ragstatus`、`/reindex`
 - `/webhook/discord` 接 Discord 訊息
 - 同步呼叫 Ollama `/api/chat`
 - 本地文件 loader：`.md`、`.txt`、`.pdf`、`.docx`
 - 簡單可預測 chunking 與 indexing 報表輸出
+- Chroma top-k retrieval
+- RAG 專用 prompt builder 與保守回答策略
 
 ### 暫不包含
-- `/rag/query`
 - tool calling
 - 多代理
 - 長期記憶
@@ -162,7 +165,9 @@ DISCORD_PUBLIC_KEY=your_discord_public_key
 RAG_DOCS_ROOT=data/docs
 RAG_VECTOR_STORE_PATH=data/vector_store
 RAG_COLLECTION_NAME=tech_docs
+RAG_TOP_K=3
 RAG_EMBEDDING_MODEL=nomic-embed-text
+RAG_QUERY_DEBUG_DEFAULT=false
 RAG_ALLOW_REINDEX=false
 ```
 
@@ -190,7 +195,7 @@ bash run_local.sh
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-## Phase 2A Indexing
+## Phase 2 Indexing And Query
 
 目前採固定策略：
 
@@ -212,6 +217,52 @@ curl http://127.0.0.1:8000/rag/status
 ```
 
 `/rag/reindex` 預設受 `RAG_ALLOW_REINDEX` 保護；若你要讓 API 端可直接重建，需在 `.env` 內明確打開。
+
+建立索引後，可直接測試 `/rag/query`：
+
+```bash
+curl -X POST http://127.0.0.1:8000/rag/query \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "question": "這份文件在說什麼？",
+    "top_k": 3
+  }'
+```
+
+若你要看 debug 資訊：
+
+```bash
+curl -X POST http://127.0.0.1:8000/rag/query \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "question": "這份文件在說什麼？",
+    "top_k": 3,
+    "debug": true
+  }'
+```
+
+一般模式下回傳格式會固定為：
+
+```json
+{
+  "answer": "...",
+  "sources": [
+    {"file": "guide.md", "chunk": 0, "relative_path": "guide.md"}
+  ]
+}
+```
+
+只有 `debug=true` 才會額外附上 `retrieved_chunks`。
+
+### Telegram 指令
+
+Phase 2B 完成後，Telegram 目前支援：
+
+- `/askdoc <問題>`：查詢知識庫
+- `/ragstatus`：查看索引狀態
+- `/reindex`：重建索引，需 admin user 且 `RAG_ALLOW_REINDEX=true`
+
+完整的中文逐步驗證流程請見 [docs/PHASE_2B_VALIDATION.md](/home/mads/tech-mk/docs/PHASE_2B_VALIDATION.md)。
 
 ---
 
