@@ -1,5 +1,6 @@
 from app.models import ChatResponse, NormalizedMessage
-from app.telegram_polling import TelegramPollingWorker, process_telegram_update
+from app.ollama_client import OllamaUnavailableError
+from app.telegram_polling import OLLAMA_UNAVAILABLE_REPLY, TelegramPollingWorker, process_telegram_update
 
 
 def test_process_telegram_update_sends_reply() -> None:
@@ -33,6 +34,39 @@ def test_process_telegram_update_sends_reply() -> None:
     assert captured["message"].text == "ping"
     assert captured["chat_id"] == "456"
     assert captured["text"] == "pong"
+
+
+def test_process_telegram_update_sends_fallback_when_ollama_is_unavailable() -> None:
+    captured = {}
+
+    class FakeService:
+        def handle_message(self, message: NormalizedMessage) -> ChatResponse:
+            captured["message"] = message
+            raise OllamaUnavailableError("connection refused")
+
+    class FakeBotClient:
+        def send_message(self, chat_id: str, text: str) -> None:
+            captured["chat_id"] = chat_id
+            captured["text"] = text
+
+    processed = process_telegram_update(
+        {
+            "update_id": 1001,
+            "message": {
+                "message_id": 2,
+                "text": "ping",
+                "from": {"id": 123},
+                "chat": {"id": 456},
+            },
+        },
+        service=FakeService(),
+        bot_client=FakeBotClient(),
+    )
+
+    assert processed is True
+    assert captured["message"].text == "ping"
+    assert captured["chat_id"] == "456"
+    assert captured["text"] == OLLAMA_UNAVAILABLE_REPLY
 
 
 def test_polling_worker_advances_offset_for_each_update() -> None:

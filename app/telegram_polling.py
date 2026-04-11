@@ -6,6 +6,7 @@ import requests
 
 from app.config import settings
 from app.connectors.telegram_handler import TelegramParser
+from app.ollama_client import OllamaUnavailableError
 from app.service import ChatService
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 POLLING_TIMEOUT_BUFFER_SECONDS = 10
 MAX_TELEGRAM_HTTP_TIMEOUT_SECONDS = 60
 MAX_TELEGRAM_JOIN_TIMEOUT_SECONDS = 60
+OLLAMA_UNAVAILABLE_REPLY = "抱歉，目前知識服務暫時不可用，請稍後再試。"
 
 
 class TelegramBotClient:
@@ -73,7 +75,13 @@ def process_telegram_update(
     if message is None:
         return False
 
-    response = service.handle_message(message)
+    try:
+        response = service.handle_message(message)
+    except OllamaUnavailableError as exc:
+        logger.warning("Ollama unavailable while handling Telegram update: %s", exc)
+        bot_client.send_message(chat_id=message.chat_id, text=OLLAMA_UNAVAILABLE_REPLY)
+        return True
+
     bot_client.send_message(chat_id=message.chat_id, text=response.reply)
     return True
 
