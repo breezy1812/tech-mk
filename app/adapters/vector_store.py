@@ -2,7 +2,7 @@ from pathlib import Path
 
 from pydantic import TypeAdapter
 
-from app.domain.schemas.rag import ChunkRecord, IndexingReport
+from app.domain.schemas.rag import ChunkRecord, IndexingReport, RetrievedChunk
 
 
 class ChromaVectorStore:
@@ -53,6 +53,36 @@ class ChromaVectorStore:
         metadatas = payload.get("metadatas", [])
         indexed_files = len({metadata.get("relative_path") for metadata in metadatas if metadata})
         return indexed_files, count
+
+    def query(self, embedding: list[float], top_k: int) -> list[RetrievedChunk]:
+        result = self._collection.query(
+            query_embeddings=[embedding],
+            n_results=top_k,
+            include=["documents", "metadatas", "distances"],
+        )
+
+        documents = result.get("documents") or [[]]
+        metadatas = result.get("metadatas") or [[]]
+        distances = result.get("distances") or [[]]
+        if not documents or not documents[0]:
+            return []
+
+        records: list[RetrievedChunk] = []
+
+        for document, metadata, distance in zip(documents[0], metadatas[0], distances[0]):
+            relevance_score = 1.0 / (1.0 + float(distance))
+            records.append(
+                RetrievedChunk(
+                    file=str(metadata.get("file_name", "unknown")),
+                    chunk=int(metadata.get("chunk_index", 0)),
+                    relative_path=str(metadata.get("relative_path", "unknown")),
+                    content=str(document),
+                    score=relevance_score,
+                )
+            )
+
+        records.sort(key=lambda item: item.score or 0.0, reverse=True)
+        return records
 
     def save_report(self, report: IndexingReport) -> None:
         self._report_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")

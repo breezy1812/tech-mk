@@ -12,14 +12,21 @@ from app.connectors.discord_handler import DiscordParser
 from app.logging_setup import setup_logging
 from app.service import ChatService
 from app.services.indexing_service import IndexingService
+from app.services.rag_service import RAGService
 from app.telegram_polling import TelegramBotClient, TelegramPollingWorker, process_telegram_update
 
 setup_logging(settings.log_level)
 logger = logging.getLogger(__name__)
 service = ChatService()
 indexing_service = IndexingService()
+rag_service = RAGService()
 telegram_client = TelegramBotClient()
-telegram_poller = TelegramPollingWorker(service=service, bot_client=telegram_client)
+telegram_poller = TelegramPollingWorker(
+    service=service,
+    bot_client=telegram_client,
+    indexing_service=indexing_service,
+    rag_service=rag_service,
+)
 
 
 @asynccontextmanager
@@ -31,7 +38,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(build_chat_router(service))
-app.include_router(build_rag_router(indexing_service))
+app.include_router(build_rag_router(indexing_service, rag_service))
 
 
 @app.get("/health")
@@ -57,7 +64,13 @@ def config_check() -> Dict[str, Any]:
 @app.post("/webhook/telegram")
 def telegram_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        if not process_telegram_update(payload, service=service, bot_client=telegram_client):
+        if not process_telegram_update(
+            payload,
+            service=service,
+            bot_client=telegram_client,
+            indexing_service=indexing_service,
+            rag_service=rag_service,
+        ):
             return {"ok": True, "skipped": True}
         return {"ok": True}
     except requests.RequestException as exc:

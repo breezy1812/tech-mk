@@ -6,8 +6,11 @@ import requests
 
 from app.config import settings
 from app.connectors.telegram_handler import TelegramParser
+from app.domain.schemas.rag import RAGQueryResponse, RAGStatusResponse
 from app.ollama_client import OllamaUnavailableError
 from app.service import ChatService
+from app.services.indexing_service import IndexingService
+from app.services.rag_service import RAGBackendError, RAGService
 
 logger = logging.getLogger(__name__)
 # Keep the HTTP client timeout slightly above Telegram long-polling timeout
@@ -16,6 +19,10 @@ POLLING_TIMEOUT_BUFFER_SECONDS = 10
 MAX_TELEGRAM_HTTP_TIMEOUT_SECONDS = 60
 MAX_TELEGRAM_JOIN_TIMEOUT_SECONDS = 60
 OLLAMA_UNAVAILABLE_REPLY = "抱歉，目前知識服務暫時不可用，請稍後再試。"
+ASKDOC_USAGE_REPLY = "用法: /askdoc <問題>"
+REINDEX_FORBIDDEN_REPLY = "只有管理員可以執行 /reindex。"
+REINDEX_DISABLED_REPLY = "目前未開放從 Telegram 執行重建索引。"
+RAG_BACKEND_ERROR_REPLY = "抱歉，目前文件查詢服務暫時不可用，請稍後再試。"
 
 
 class TelegramBotClient:
@@ -70,26 +77,102 @@ def process_telegram_update(
     update: Dict[str, Any],
     service: ChatService,
     bot_client: TelegramBotClient,
+    indexing_service: Optional[IndexingService] = None,
+    rag_service: Optional[RAGService] = None,
 ) -> bool:
     message = TelegramParser.parse(update)
     if message is None:
         return False
 
+    text = message.text.strip()
+
     try:
-        response = service.handle_message(message)
+        if text.startswith("/askdoc"):
+            reply = _handle_askdoc(text=text, rag_service=rag_service)
+        elif text == "/ragstatus":
+            reply = _handle_ragstatus(indexing_service=indexing_service)
+        elif text == "/reindex":
+            reply = _handle_reindex(message_user_id=message.user_id, indexing_service=indexing_service)
+        else:
+            response = service.handle_message(message)
+            reply = response.reply
     except OllamaUnavailableError as exc:
         logger.warning("Ollama unavailable while handling Telegram update: %s", exc)
-        bot_client.send_message(chat_id=message.chat_id, text=OLLAMA_UNAVAILABLE_REPLY)
-        return True
+        reply = OLLAMA_UNAVAILABLE_REPLY
+    except RAGBackendError as exc:
+        logger.warning("RAG backend unavailable while handling Telegram update: %s", exc)
+        reply = RAG_BACKEND_ERROR_REPLY
 
-    bot_client.send_message(chat_id=message.chat_id, text=response.reply)
+    bot_client.send_message(chat_id=message.chat_id, text=reply)
     return True
 
 
+def _handle_askdoc(text: str, rag_service: Optional[RAGService]) -> str:
+    if rag_service is None:
+        raise RAGBackendError("RAG service is not configured")
+
+    question = text[len("/askdoc") :].strip()
+    if not question:
+        return ASKDOC_USAGE_REPLY
+
+    result = rag_service.query(question=question, top_k=settings.rag_top_k, debug=False)
+    return _format_askdoc_reply(result)
+
+
+def _handle_ragstatus(indexing_service: Optional[IndexingService]) -> str:
+    if indexing_service is None:
+        raise RAGBackendError("Indexing service is not configured")
+
+    status = indexing_service.status()
+    return _format_ragstatus_reply(status)
+
+
+def _handle_reindex(message_user_id: str, indexing_service: Optional[IndexingService]) -> str:
+    if not settings.rag_allow_reindex:
+        return REINDEX_DISABLED_REPLY
+    if message_user_id not in settings.telegram_admin_user_id_set:
+        return REINDEX_FORBIDDEN_REPLY
+    if indexing_service is None:
+        raise RAGBackendError("Indexing service is not configured")
+
+    report = indexing_service.reindex()
+    return (
+        f"索引重建完成。檔案數: {report.files_processed}，"
+        f"chunks: {report.chunks_indexed}，"
+        f"失敗檔案: {len(report.failed_files)}"
+    )
+
+
+def _format_askdoc_reply(result: RAGQueryResponse) -> str:
+    if not result.sources:
+        return result.answer
+
+    file_names = ", ".join(dict.fromkeys(source.file for source in result.sources))
+    return f"{result.answer}\n\n來源: {file_names}"
+
+
+def _format_ragstatus_reply(status: RAGStatusResponse) -> str:
+    last_indexed = status.last_indexed_at.isoformat() if status.last_indexed_at else "尚未建立索引"
+    return (
+        f"Collection: {status.collection_name}\n"
+        f"文件數: {status.indexed_files}\n"
+        f"Chunks: {status.indexed_chunks}\n"
+        f"最後索引時間: {last_indexed}"
+    )
+
+
 class TelegramPollingWorker:
-    def __init__(self, service: ChatService, bot_client: TelegramBotClient) -> None:
+    def __init__(
+        self,
+        service: ChatService,
+        bot_client: TelegramBotClient,
+        indexing_service: Optional[IndexingService] = None,
+        rag_service: Optional[RAGService] = None,
+    ) -> None:
         self._service = service
         self._bot_client = bot_client
+        self._indexing_service = indexing_service
+        self._rag_service = rag_service
         self._next_offset: Optional[int] = None
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -145,7 +228,13 @@ class TelegramPollingWorker:
         for update in updates:
             update_id = update.get("update_id")
             try:
-                process_telegram_update(update, service=self._service, bot_client=self._bot_client)
+                process_telegram_update(
+                    update,
+                    service=self._service,
+                    bot_client=self._bot_client,
+                    indexing_service=self._indexing_service,
+                    rag_service=self._rag_service,
+                )
             except Exception as exc:
                 logger.exception(
                     "Failed to process Telegram update %s: %s",

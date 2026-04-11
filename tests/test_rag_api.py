@@ -3,8 +3,9 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 from app.config import settings
-from app.domain.schemas.rag import IndexingFileReport, IndexingReport, RAGStatusResponse
-from app.main import app, indexing_service
+from app.domain.schemas.rag import ChunkSource, IndexingFileReport, IndexingReport, RAGQueryResponse, RAGStatusResponse, RetrievedChunk
+from app.main import app, indexing_service, rag_service
+from app.services.rag_service import RAGBackendError
 
 client = TestClient(app)
 
@@ -76,3 +77,34 @@ def test_rag_reindex_returns_indexing_report(monkeypatch) -> None:
         assert data["files"][0]["file"] == "guide.md"
     finally:
         settings.rag_allow_reindex = original_allow_reindex
+
+
+def test_rag_query_returns_answer_and_sources(monkeypatch) -> None:
+    payload = RAGQueryResponse(
+        answer="RAG uses retrieved context.",
+        sources=[ChunkSource(file="guide.md", chunk=0, relative_path="guide.md")],
+        retrieved_chunks=[
+            RetrievedChunk(file="guide.md", chunk=0, relative_path="guide.md", content="RAG uses context", score=0.9)
+        ],
+    )
+    monkeypatch.setattr(rag_service, "query", lambda question, top_k, debug: payload)
+
+    response = client.post("/rag/query", json={"question": "What is RAG?", "top_k": 2, "debug": True})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["answer"] == "RAG uses retrieved context."
+    assert data["sources"][0]["file"] == "guide.md"
+    assert data["retrieved_chunks"][0]["score"] == 0.9
+
+
+def test_rag_query_returns_backend_failure(monkeypatch) -> None:
+    def fail(question, top_k, debug):
+        raise RAGBackendError("retrieval backend failed")
+
+    monkeypatch.setattr(rag_service, "query", fail)
+
+    response = client.post("/rag/query", json={"question": "What is RAG?"})
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "retrieval backend failed"
