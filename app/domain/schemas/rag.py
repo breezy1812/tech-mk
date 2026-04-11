@@ -44,12 +44,33 @@ class IndexingFileReport(BaseModel):
     error: Optional[str] = None
 
 
+class IndexManifestFile(BaseModel):
+    file: str
+    relative_path: str
+    source_type: str
+    file_hash: str
+    last_modified_at: datetime
+    chunk_ids: List[str]
+    chunk_count: int
+
+
+class IndexManifest(BaseModel):
+    collection_name: str
+    docs_root: str
+    updated_at: datetime
+    files: List[IndexManifestFile]
+
+
 class IndexingReport(BaseModel):
+    mode: str = "reindex"
     collection_name: str
     embedding_model: str
     docs_root: str
     files_processed: int
     chunks_indexed: int
+    files_indexed: int = 0
+    files_unchanged: int = 0
+    files_deleted: int = 0
     files: List[IndexingFileReport]
     failed_files: List[str]
     indexed_at: datetime

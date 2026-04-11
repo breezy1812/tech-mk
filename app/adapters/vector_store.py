@@ -2,7 +2,7 @@ from pathlib import Path
 
 from pydantic import TypeAdapter
 
-from app.domain.schemas.rag import ChunkRecord, IndexingReport, RetrievedChunk
+from app.domain.schemas.rag import ChunkRecord, IndexManifest, IndexingReport, RetrievedChunk
 
 
 class ChromaVectorStore:
@@ -15,6 +15,7 @@ class ChromaVectorStore:
         self._persist_dir = Path(persist_path)
         self._persist_dir.mkdir(parents=True, exist_ok=True)
         self._report_path = self._persist_dir / "indexing_report.json"
+        self._manifest_path = self._persist_dir / "indexing_manifest.json"
         self._client = chromadb.PersistentClient(path=str(self._persist_dir))
         self.collection_name = collection_name
         self._collection = self._client.get_or_create_collection(name=collection_name)
@@ -44,6 +45,11 @@ class ChromaVectorStore:
             ],
             embeddings=embeddings,
         )
+
+    def delete(self, chunk_ids: list[str]) -> None:
+        if not chunk_ids:
+            return
+        self._collection.delete(ids=chunk_ids)
 
     def stats(self) -> tuple[int, int]:
         count = self._collection.count()
@@ -91,3 +97,11 @@ class ChromaVectorStore:
         if not self._report_path.exists():
             return None
         return TypeAdapter(IndexingReport).validate_json(self._report_path.read_text(encoding="utf-8"))
+
+    def save_manifest(self, manifest: IndexManifest) -> None:
+        self._manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+
+    def load_manifest(self) -> IndexManifest | None:
+        if not self._manifest_path.exists():
+            return None
+        return TypeAdapter(IndexManifest).validate_json(self._manifest_path.read_text(encoding="utf-8"))

@@ -79,6 +79,62 @@ def test_rag_reindex_returns_indexing_report(monkeypatch) -> None:
         settings.rag_allow_reindex = original_allow_reindex
 
 
+def test_rag_sync_requires_flag() -> None:
+    original_allow_reindex = settings.rag_allow_reindex
+    try:
+        settings.rag_allow_reindex = False
+        response = client.post("/rag/sync")
+        assert response.status_code == 403
+    finally:
+        settings.rag_allow_reindex = original_allow_reindex
+
+
+def test_rag_sync_returns_indexing_report(monkeypatch) -> None:
+    report = IndexingReport(
+        mode="sync",
+        collection_name="tech_docs",
+        embedding_model="fake-embed",
+        docs_root="data/docs",
+        files_processed=2,
+        chunks_indexed=3,
+        files_indexed=1,
+        files_unchanged=1,
+        files_deleted=1,
+        files=[
+            IndexingFileReport(
+                file="guide.md",
+                relative_path="guide.md",
+                chunk_count=3,
+                status="updated",
+            ),
+            IndexingFileReport(
+                file="old.txt",
+                relative_path="old.txt",
+                chunk_count=0,
+                status="deleted",
+            ),
+        ],
+        failed_files=[],
+        indexed_at=datetime.now(timezone.utc),
+    )
+    original_allow_reindex = settings.rag_allow_reindex
+
+    try:
+        settings.rag_allow_reindex = True
+        monkeypatch.setattr(indexing_service, "sync_index", lambda: report)
+
+        response = client.post("/rag/sync")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["mode"] == "sync"
+        assert data["files_indexed"] == 1
+        assert data["files_deleted"] == 1
+        assert data["files"][1]["status"] == "deleted"
+    finally:
+        settings.rag_allow_reindex = original_allow_reindex
+
+
 def test_rag_query_returns_answer_and_sources(monkeypatch) -> None:
     payload = RAGQueryResponse(
         answer="RAG uses retrieved context.",

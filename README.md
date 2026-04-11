@@ -65,6 +65,7 @@ Telegram / Discord
 - `/rag/query` 根據知識庫內容回答問題，並回傳來源清單
 - `/rag/status` 檢查目前 collection 與最近一次 indexing 報表
 - `/rag/reindex` 全量重建單一 `tech_docs` collection
+- `/rag/sync` 只同步新增、修改、刪除的文件變更
 - Telegram bot 長輪詢（long polling）收訊與回覆
 - Telegram `/askdoc`、`/ragstatus`、`/reindex`
 - `/webhook/discord` 接 Discord 訊息
@@ -201,7 +202,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 - 單一 docs root：`data/docs`
 - 單一 collection：`tech_docs`
-- 全量重建：每次 `/rag/reindex` 都重建整個 collection
+- 支援全量重建與增量同步兩種模式
 
 可先把文件放進 `data/docs`，再用以下方式重建索引：
 
@@ -213,10 +214,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ```bash
 curl -X POST http://127.0.0.1:8000/rag/reindex
+curl -X POST http://127.0.0.1:8000/rag/sync
 curl http://127.0.0.1:8000/rag/status
 ```
 
-`/rag/reindex` 預設受 `RAG_ALLOW_REINDEX` 保護；若你要讓 API 端可直接重建，需在 `.env` 內明確打開。
+`/rag/reindex` 與 `/rag/sync` 都受 `RAG_ALLOW_REINDEX` 保護；若你要讓 API 端可直接更新索引，需在 `.env` 內明確打開。
 
 建立索引後，可直接測試 `/rag/query`：
 

@@ -19,6 +19,12 @@ def build_rag_router(indexing_service: IndexingService, rag_service: RAGService)
             raise HTTPException(status_code=403, detail="RAG reindex is disabled")
         return indexing_service.reindex()
 
+    @router.post("/sync", response_model=IndexingReport)
+    def rag_sync() -> IndexingReport:
+        if not settings.rag_allow_reindex:
+            raise HTTPException(status_code=403, detail="RAG sync is disabled")
+        return indexing_service.sync_index()
+
     @router.post("/query", response_model=RAGQueryResponse)
     def rag_query(request: RAGQueryRequest) -> RAGQueryResponse:
         try:
