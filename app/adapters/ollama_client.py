@@ -50,36 +50,59 @@ class OllamaEmbeddingClient:
         self.timeout = settings.rag_embedding_timeout_seconds
 
     def embed(self, text: str) -> List[float]:
-        last_error: requests.RequestException | None = None
-        candidates = [
-            ("/api/embed", {"model": self.model, "input": text}),
-            ("/api/embeddings", {"model": self.model, "prompt": text}),
-        ]
+        embeddings = self.embed_many([text])
+        if not embeddings:
+            raise OllamaUnavailableError("Ollama embeddings returned an empty payload")
+        return embeddings[0]
 
-        for path, payload in candidates:
+    def embed_many(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+
+        last_error: requests.RequestException | None = None
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/embed",
+                json={"model": self.model, "input": texts},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            last_error = exc
+            if exc.response is None or exc.response.status_code != 404:
+                raise OllamaUnavailableError(f"Failed to call Ollama embeddings at {self.base_url}") from exc
+        except requests.RequestException as exc:
+            raise OllamaUnavailableError(f"Failed to reach Ollama embeddings at {self.base_url}") from exc
+        else:
+            embeddings = self._extract_embeddings(response.json())
+            if embeddings is not None:
+                return embeddings
+            raise OllamaUnavailableError("Ollama embeddings returned an invalid payload")
+
+        fallback_embeddings: list[list[float]] = []
+        for text in texts:
             try:
                 response = requests.post(
-                    f"{self.base_url}{path}",
-                    json=payload,
+                    f"{self.base_url}/api/embeddings",
+                    json={"model": self.model, "prompt": text},
                     timeout=self.timeout,
                 )
                 response.raise_for_status()
             except requests.HTTPError as exc:
-                last_error = exc
-                if exc.response is not None and exc.response.status_code == 404:
-                    continue
                 raise OllamaUnavailableError(f"Failed to call Ollama embeddings at {self.base_url}") from exc
             except requests.RequestException as exc:
                 raise OllamaUnavailableError(f"Failed to reach Ollama embeddings at {self.base_url}") from exc
 
-            embedding = self._extract_embedding(response.json())
-            if embedding is not None:
-                return embedding
-            raise OllamaUnavailableError("Ollama embeddings returned an invalid payload")
+            embedding = self._extract_single_embedding(response.json())
+            if embedding is None:
+                raise OllamaUnavailableError("Ollama embeddings returned an invalid payload")
+            fallback_embeddings.append(embedding)
+
+        return fallback_embeddings
 
         raise OllamaUnavailableError(f"Failed to call Ollama embeddings at {self.base_url}") from last_error
 
-    def _extract_embedding(self, data: Dict[str, Any]) -> List[float] | None:
+    def _extract_single_embedding(self, data: Dict[str, Any]) -> List[float] | None:
         embedding = data.get("embedding")
         if isinstance(embedding, list):
             return [float(value) for value in embedding]
@@ -87,5 +110,16 @@ class OllamaEmbeddingClient:
         embeddings = data.get("embeddings")
         if isinstance(embeddings, list) and embeddings and isinstance(embeddings[0], list):
             return [float(value) for value in embeddings[0]]
+
+        return None
+
+    def _extract_embeddings(self, data: Dict[str, Any]) -> list[list[float]] | None:
+        embeddings = data.get("embeddings")
+        if isinstance(embeddings, list) and all(isinstance(item, list) for item in embeddings):
+            return [[float(value) for value in item] for item in embeddings]
+
+        single_embedding = self._extract_single_embedding(data)
+        if single_embedding is not None:
+            return [single_embedding]
 
         return None

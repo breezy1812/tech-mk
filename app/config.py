@@ -35,11 +35,15 @@ class Settings(BaseSettings):
     rag_collection_name: str = "tech_docs"
     rag_chunk_size: int = 800
     rag_chunk_overlap: int = 120
+    rag_max_chunks_per_file: int = 2000
     rag_top_k: int = 3
     rag_embedding_model: str = "nomic-embed-text"
     rag_embedding_timeout_seconds: int = 60
+    rag_embedding_batch_size: int = 32
+    rag_loader_timeout_seconds: int = 120
     rag_allow_reindex: bool = False
     rag_query_debug_default: bool = False
+    rag_chroma_anonymized_telemetry: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

@@ -214,6 +214,7 @@ class TelegramPollingWorker:
         self._thread = threading.Thread(
             target=self.run,
             name="telegram-polling-worker",
+            daemon=True,
         )
         self._thread.start()
         logger.info("Telegram polling worker started.")
@@ -224,14 +225,12 @@ class TelegramPollingWorker:
             return
 
         self._stop_event.set()
-        thread.join(
-            timeout=min(
-                settings.telegram_polling_timeout_seconds + POLLING_TIMEOUT_BUFFER_SECONDS,
-                MAX_TELEGRAM_JOIN_TIMEOUT_SECONDS,
-            )
-        )
+        thread.join(timeout=1)
         self._thread = None
-        logger.info("Telegram polling worker stopped.")
+        if thread.is_alive():
+            logger.warning("Telegram polling worker is still exiting; continuing shutdown.")
+        else:
+            logger.info("Telegram polling worker stopped.")
 
     def run(self) -> None:
         while not self._stop_event.is_set():

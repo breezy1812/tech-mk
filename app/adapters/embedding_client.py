@@ -11,3 +11,6 @@ class EmbeddingClient:
 
     def embed(self, text: str) -> List[float]:
         return self._client.embed(text)
+
+    def embed_many(self, texts: list[str]) -> list[list[float]]:
+        return self._client.embed_many(texts)

@@ -3,6 +3,7 @@ from typing import Iterable
 
 from pydantic import TypeAdapter
 
+from app.config import settings
 from app.domain.schemas.rag import ChunkRecord, IndexManifest, IndexingReport, RetrievedChunk
 
 
@@ -10,6 +11,7 @@ class ChromaVectorStore:
     def __init__(self, persist_path: str, collection_name: str) -> None:
         try:
             import chromadb
+            from chromadb.config import Settings as ChromaSettings
         except ImportError as exc:
             raise RuntimeError("chromadb is required for RAG indexing") from exc
 
@@ -17,7 +19,13 @@ class ChromaVectorStore:
         self._persist_dir.mkdir(parents=True, exist_ok=True)
         self._report_path = self._persist_dir / "indexing_report.json"
         self._manifest_path = self._persist_dir / "indexing_manifest.json"
-        self._client = chromadb.PersistentClient(path=str(self._persist_dir))
+        chroma_settings = ChromaSettings(
+            anonymized_telemetry=settings.rag_chroma_anonymized_telemetry,
+        )
+        self._client = chromadb.PersistentClient(
+            path=str(self._persist_dir),
+            settings=chroma_settings,
+        )
         self.collection_name = collection_name
         self._collection = self._client.get_or_create_collection(name=collection_name)
 

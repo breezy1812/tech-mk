@@ -31,9 +31,13 @@ telegram_poller = TelegramPollingWorker(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    indexing_service.clear_shutdown()
     telegram_poller.start()
-    yield
-    telegram_poller.stop()
+    try:
+        yield
+    finally:
+        indexing_service.request_shutdown()
+        telegram_poller.stop()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
