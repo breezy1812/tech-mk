@@ -84,6 +84,8 @@ class DocumentLoaderRegistry:
                 remaining = deadline - monotonic()
                 if remaining <= 0:
                     self._stop_process(process)
+                    if path.suffix.lower() == ".pdf":
+                        return self._load_pdf_with_pdftotext(path, docs_root)
                     raise RuntimeError(f"Document loader timed out for {path.name}")
 
                 process.join(timeout=min(self._sandbox_poll_interval_seconds, remaining))
