@@ -50,18 +50,42 @@ class OllamaEmbeddingClient:
         self.timeout = settings.rag_embedding_timeout_seconds
 
     def embed(self, text: str) -> List[float]:
-        try:
-            response = requests.post(
-                f"{self.base_url}/api/embeddings",
-                json={"model": self.model, "prompt": text},
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
-        except requests.RequestException as exc:
-            raise OllamaUnavailableError(f"Failed to reach Ollama embeddings at {self.base_url}") from exc
+        last_error: requests.RequestException | None = None
+        candidates = [
+            ("/api/embed", {"model": self.model, "input": text}),
+            ("/api/embeddings", {"model": self.model, "prompt": text}),
+        ]
 
-        data = response.json()
-        embedding = data.get("embedding")
-        if not isinstance(embedding, list):
+        for path, payload in candidates:
+            try:
+                response = requests.post(
+                    f"{self.base_url}{path}",
+                    json=payload,
+                    timeout=self.timeout,
+                )
+                response.raise_for_status()
+            except requests.HTTPError as exc:
+                last_error = exc
+                if exc.response is not None and exc.response.status_code == 404:
+                    continue
+                raise OllamaUnavailableError(f"Failed to call Ollama embeddings at {self.base_url}") from exc
+            except requests.RequestException as exc:
+                raise OllamaUnavailableError(f"Failed to reach Ollama embeddings at {self.base_url}") from exc
+
+            embedding = self._extract_embedding(response.json())
+            if embedding is not None:
+                return embedding
             raise OllamaUnavailableError("Ollama embeddings returned an invalid payload")
-        return [float(value) for value in embedding]
+
+        raise OllamaUnavailableError(f"Failed to call Ollama embeddings at {self.base_url}") from last_error
+
+    def _extract_embedding(self, data: Dict[str, Any]) -> List[float] | None:
+        embedding = data.get("embedding")
+        if isinstance(embedding, list):
+            return [float(value) for value in embedding]
+
+        embeddings = data.get("embeddings")
+        if isinstance(embeddings, list) and embeddings and isinstance(embeddings[0], list):
+            return [float(value) for value in embeddings[0]]
+
+        return None

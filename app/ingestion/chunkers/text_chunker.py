@@ -2,6 +2,7 @@ import hashlib
 from typing import Iterable, List
 
 from app.domain.schemas.rag import ChunkRecord, SourceDocument
+from app.ingestion.text_sanitizer import sanitize_text
 
 
 class TextChunker:
@@ -12,23 +13,26 @@ class TextChunker:
         self.chunk_overlap = chunk_overlap
 
     def chunk_document(self, document: SourceDocument) -> List[ChunkRecord]:
+        normalized_content = sanitize_text(document.content)
+
         if document.source_type == "markdown":
-            segments = self._split_markdown(document.content)
+            segments = self._split_markdown(normalized_content)
         else:
-            segments = self._split_plain_text(document.content)
+            segments = self._split_plain_text(normalized_content)
 
         chunks = self._assemble_chunks(segments)
         records: List[ChunkRecord] = []
         for index, content in enumerate(chunks):
+            safe_content = sanitize_text(content)
             records.append(
                 ChunkRecord(
                     chunk_id=f"{document.relative_path}:{index}",
-                    content=content,
+                    content=safe_content,
                     file_name=document.file_name,
                     relative_path=document.relative_path,
                     source_type=document.source_type,
                     chunk_index=index,
-                    content_hash=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                    content_hash=hashlib.sha256(safe_content.encode("utf-8")).hexdigest(),
                     metadata={
                         "file_name": document.file_name,
                         "relative_path": document.relative_path,

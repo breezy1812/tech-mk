@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Iterable
 
 from pydantic import TypeAdapter
 
@@ -30,21 +31,42 @@ class ChromaVectorStore:
     def upsert(self, chunks: list[ChunkRecord], embeddings: list[list[float]]) -> None:
         if not chunks:
             return
-        self._collection.upsert(
-            ids=[chunk.chunk_id for chunk in chunks],
-            documents=[chunk.content for chunk in chunks],
-            metadatas=[
-                {
-                    "file_name": chunk.file_name,
-                    "relative_path": chunk.relative_path,
-                    "source_type": chunk.source_type,
-                    "chunk_index": chunk.chunk_index,
-                    "content_hash": chunk.content_hash,
-                }
-                for chunk in chunks
-            ],
-            embeddings=embeddings,
-        )
+        ids = [chunk.chunk_id for chunk in chunks]
+        documents = [chunk.content for chunk in chunks]
+        metadatas = [
+            {
+                "file_name": chunk.file_name,
+                "relative_path": chunk.relative_path,
+                "source_type": chunk.source_type,
+                "chunk_index": chunk.chunk_index,
+                "content_hash": chunk.content_hash,
+            }
+            for chunk in chunks
+        ]
+
+        max_batch_size = self._get_max_batch_size(len(ids))
+        for batch_start in range(0, len(ids), max_batch_size):
+            batch_end = batch_start + max_batch_size
+            self._collection.upsert(
+                ids=ids[batch_start:batch_end],
+                documents=documents[batch_start:batch_end],
+                metadatas=metadatas[batch_start:batch_end],
+                embeddings=embeddings[batch_start:batch_end],
+            )
+
+    def _get_max_batch_size(self, default: int) -> int:
+        get_max_batch_size = getattr(self._client, "get_max_batch_size", None)
+        if callable(get_max_batch_size):
+            try:
+                value = int(get_max_batch_size())
+                if value > 0:
+                    return value
+            except Exception:
+                pass
+        max_batch_size = getattr(self._client, "max_batch_size", None)
+        if isinstance(max_batch_size, int) and max_batch_size > 0:
+            return max_batch_size
+        return max(default, 1)
 
     def delete(self, chunk_ids: list[str]) -> None:
         if not chunk_ids:

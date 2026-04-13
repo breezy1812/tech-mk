@@ -40,11 +40,16 @@ class IndexingService:
 
     def sync_index(self) -> IndexingReport:
         manifest = self.vector_store.load_manifest()
+        indexed_files, indexed_chunks = self.vector_store.stats()
         if manifest is None:
-            _, indexed_chunks = self.vector_store.stats()
             if indexed_chunks > 0:
                 logger.info("No indexing manifest found for existing collection; falling back to full rebuild.")
                 return self._index_documents(mode="reindex", reset_collection=True)
+        elif manifest.docs_root != str(self.docs_root) or len(manifest.files) != indexed_files:
+            logger.info(
+                "Index manifest is inconsistent with current docs root or collection stats; falling back to full rebuild."
+            )
+            return self._index_documents(mode="reindex", reset_collection=True)
         return self._index_documents(mode="sync", reset_collection=False, manifest=manifest)
 
     def _index_documents(
