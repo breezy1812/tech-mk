@@ -95,6 +95,41 @@
 * 刪除檔案數
 * 失敗檔案數
 
+### 6. 大量文件同步時的建議
+
+如果你這次放了很多測試文件，請先注意這件事：
+
+* `/sync` 雖然已支援 Telegram，但目前仍是同步執行
+* 如果變更檔案很多、單檔很大，或 PDF / docx 很多，bot 可能會很久才回覆
+* 這不一定代表真的壞掉，但使用體驗上會像卡住
+
+因此建議這樣用：
+
+* 小量新增、修改、刪除：可直接用 Telegram `/sync`
+* 大量文件同步：優先用 API `POST /rag/sync`
+* 如果你改了 embedding、chunking 規則，或懷疑索引狀態不一致：改用 `/reindex`
+
+最穩定的 API 方式如下：
+
+```bash
+curl -X POST http://127.0.0.1:8000/rag/sync
+```
+
+如果你在大量同步時看到：
+
+```text
+curl: (52) Empty reply from server
+```
+
+先優先檢查兩件事：
+
+1. 你是不是用開發模式 `--reload` 啟動，而且同步時同時寫入了向量庫資料目錄
+2. docs root 裡是否有非 UTF-8 的 `.txt` 或 `.md` 文件
+
+目前程式已補上常見編碼容錯，也已把本地啟動腳本排除 `data/vector_store`、`data/docs`、`test_docs` 的 reload 監看。
+
+如果你剛剛已經開著舊版 server，請先重啟一次再測。
+
 ---
 
 ## Telegram 目前沒有的指令
@@ -107,6 +142,8 @@
 | `/debug` | 未提供 | debug retrieval 細節目前只保留在 API `debug=true` |
 
 也就是說，目前 Telegram 已支援一般查詢、狀態查看、全量重建與增量同步；但 debug 查詢仍需走 API。
+
+另外，若同步檔案量非常大，仍建議優先走 API `POST /rag/sync`，不要把 Telegram 當成大批量同步入口。
 
 ---
 
@@ -205,4 +242,4 @@ RAG_ALLOW_REINDEX=true
 
 1. Telegram 查知識庫用 `/askdoc <問題>`
 2. Telegram 看狀態用 `/ragstatus`
-3. Telegram 管理同步可用 `/sync`，API 仍可用 `POST /rag/sync`
+3. 小量同步可用 Telegram `/sync`，大量同步優先用 API `POST /rag/sync`
