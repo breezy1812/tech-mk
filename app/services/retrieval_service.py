@@ -6,6 +6,7 @@ from app.adapters.embedding_client import EmbeddingClient
 from app.adapters.vector_store import ChromaVectorStore
 from app.config import settings
 from app.domain.schemas.rag import RetrievedChunk
+from app.rag_trace import archive_trace_event
 
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,16 @@ class RetrievalService:
             candidate_k,
             query_terms[:12],
         )
+        archive_trace_event(
+            trace_id or "-",
+            "retrieved_candidates",
+            {
+                "top_k": effective_top_k,
+                "candidate_k": candidate_k,
+                "query_terms": query_terms[:20],
+                "candidates": self._summarize_chunks(candidates),
+            },
+        )
         logger.info(
             "[trace %s] Candidate preview: %s",
             trace_id or "-",
@@ -86,6 +97,14 @@ class RetrievalService:
             "[trace %s] Reranked top chunks: %s",
             trace_id or "-",
             self._summarize_chunks(ranked),
+        )
+        archive_trace_event(
+            trace_id or "-",
+            "reranked_chunks",
+            {
+                "top_k": effective_top_k,
+                "chunks": self._summarize_chunks(ranked),
+            },
         )
         return ranked
 

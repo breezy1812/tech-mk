@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.config import settings
 from app.domain.schemas.rag import IndexingReport, RAGQueryRequest, RAGQueryResponse, RAGStatusResponse
+from app.rag_trace import rag_trace_context
 from app.services.indexing_service import IndexingInterruptedError, IndexingService
 from app.services.rag_service import RAGBackendError, RAGService
 
@@ -34,11 +35,12 @@ def build_rag_router(indexing_service: IndexingService, rag_service: RAGService)
     @router.post("/query", response_model=RAGQueryResponse)
     def rag_query(request: RAGQueryRequest) -> RAGQueryResponse:
         try:
-            return rag_service.query(
-                question=request.question,
-                top_k=request.top_k,
-                debug=request.debug,
-            )
+            with rag_trace_context(account="api", channel="api"):
+                return rag_service.query(
+                    question=request.question,
+                    top_k=request.top_k,
+                    debug=request.debug,
+                )
         except RAGBackendError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 

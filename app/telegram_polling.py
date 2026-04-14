@@ -8,6 +8,7 @@ from app.config import settings
 from app.connectors.telegram_handler import TelegramParser
 from app.domain.schemas.rag import RAGQueryResponse, RAGStatusResponse
 from app.ollama_client import OllamaUnavailableError
+from app.rag_trace import rag_trace_context
 from app.service import ChatService
 from app.services.indexing_service import IndexingService
 from app.services.rag_service import RAGBackendError, RAGService
@@ -90,7 +91,7 @@ def process_telegram_update(
 
     try:
         if text.startswith("/askdoc"):
-            reply = _handle_askdoc(text=text, rag_service=rag_service)
+            reply = _handle_askdoc(text=text, message_user_id=message.user_id, rag_service=rag_service)
         elif text == "/ragstatus":
             reply = _handle_ragstatus(indexing_service=indexing_service)
         elif text == "/sync":
@@ -111,7 +112,7 @@ def process_telegram_update(
     return True
 
 
-def _handle_askdoc(text: str, rag_service: Optional[RAGService]) -> str:
+def _handle_askdoc(text: str, message_user_id: str, rag_service: Optional[RAGService]) -> str:
     if rag_service is None:
         raise RAGBackendError("RAG service is not configured")
 
@@ -119,7 +120,8 @@ def _handle_askdoc(text: str, rag_service: Optional[RAGService]) -> str:
     if not question:
         return ASKDOC_USAGE_REPLY
 
-    result = rag_service.query(question=question, top_k=settings.rag_top_k, debug=False)
+    with rag_trace_context(account=f"telegram_{message_user_id}", channel="telegram"):
+        result = rag_service.query(question=question, top_k=settings.rag_top_k, debug=False)
     return _format_askdoc_reply(result)
 
 

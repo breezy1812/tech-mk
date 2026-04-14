@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     rag_allow_reindex: bool = False
     rag_query_debug_default: bool = False
     rag_chroma_anonymized_telemetry: bool = False
+    rag_trace_archive_enabled: bool = True
+    rag_trace_archive_dir: str = "logs/rag_queries"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
