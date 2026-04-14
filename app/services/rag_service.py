@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from app.adapters.ollama_client import OllamaClient, OllamaUnavailableError
 from app.config import settings
@@ -26,13 +27,23 @@ class RAGService:
 
     def query(self, question: str, top_k: int | None = None, debug: bool | None = None) -> RAGQueryResponse:
         effective_debug = settings.rag_query_debug_default if debug is None else debug
+        trace_id = uuid.uuid4().hex[:8]
+        logger.info(
+            "[trace %s] RAG query start top_k=%s debug=%s question=%s",
+            trace_id,
+            top_k or settings.rag_top_k,
+            effective_debug,
+            question,
+        )
 
         try:
-            retrieved_chunks = self.retrieval_service.retrieve(question=question, top_k=top_k)
+            retrieved_chunks = self.retrieval_service.retrieve(question=question, top_k=top_k, trace_id=trace_id)
         except Exception as exc:
+            logger.exception("[trace %s] Retrieval failed for question=%s", trace_id, question)
             raise RAGBackendError("Failed to retrieve relevant knowledge base chunks") from exc
 
         if not retrieved_chunks:
+            logger.info("[trace %s] No chunks retrieved", trace_id)
             return RAGQueryResponse(
                 answer="目前知識庫中沒有足夠資訊可以回答這個問題。",
                 sources=[],
@@ -40,12 +51,25 @@ class RAGService:
             )
 
         prompt = self.prompt_builder.build_prompt(question=question, chunks=retrieved_chunks)
+        logger.info(
+            "[trace %s] Built prompt with %d chunks and %d chars",
+            trace_id,
+            len(retrieved_chunks),
+            len(prompt),
+        )
         try:
             result = self.client.chat(prompt)
         except OllamaUnavailableError as exc:
+            logger.exception("[trace %s] Ollama generation failed", trace_id)
             raise RAGBackendError("Failed to generate RAG answer from Ollama") from exc
 
         sources = self._build_sources(retrieved_chunks)
+        logger.info(
+            "[trace %s] Final sources=%s answer_preview=%s",
+            trace_id,
+            [source.file for source in sources],
+            self._preview_text(result["reply"]),
+        )
         response = RAGQueryResponse(answer=result["reply"], sources=sources)
         if effective_debug:
             response.retrieved_chunks = retrieved_chunks
@@ -67,3 +91,9 @@ class RAGService:
                 )
             )
         return sources
+
+    def _preview_text(self, text: str, limit: int = 120) -> str:
+        compact = " ".join(text.split())
+        if len(compact) <= limit:
+            return compact
+        return f"{compact[:limit]}..."

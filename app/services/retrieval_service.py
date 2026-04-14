@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import Optional
 
@@ -5,6 +6,9 @@ from app.adapters.embedding_client import EmbeddingClient
 from app.adapters.vector_store import ChromaVectorStore
 from app.config import settings
 from app.domain.schemas.rag import RetrievedChunk
+
+
+logger = logging.getLogger(__name__)
 
 
 class RetrievalService:
@@ -55,7 +59,7 @@ class RetrievalService:
             collection_name=settings.rag_collection_name,
         )
 
-    def retrieve(self, question: str, top_k: int | None = None) -> list[RetrievedChunk]:
+    def retrieve(self, question: str, top_k: int | None = None, trace_id: str | None = None) -> list[RetrievedChunk]:
         effective_top_k = top_k or settings.rag_top_k
         query_embedding = self.embedding_client.embed(question)
         candidate_k = min(
@@ -63,13 +67,32 @@ class RetrievalService:
             self._candidate_cap,
         )
         candidates = self.vector_store.query(query_embedding, max(effective_top_k, candidate_k))
-        return self._rerank(question=question, chunks=candidates, top_k=effective_top_k)
+        query_terms = self._extract_query_terms(question)
+        logger.info(
+            "[trace %s] Retrieved %d candidates with top_k=%d candidate_k=%d query_terms=%s",
+            trace_id or "-",
+            len(candidates),
+            effective_top_k,
+            candidate_k,
+            query_terms[:12],
+        )
+        logger.info(
+            "[trace %s] Candidate preview: %s",
+            trace_id or "-",
+            self._summarize_chunks(candidates),
+        )
+        ranked = self._rerank(chunks=candidates, top_k=effective_top_k, query_terms=query_terms)
+        logger.info(
+            "[trace %s] Reranked top chunks: %s",
+            trace_id or "-",
+            self._summarize_chunks(ranked),
+        )
+        return ranked
 
-    def _rerank(self, question: str, chunks: list[RetrievedChunk], top_k: int) -> list[RetrievedChunk]:
+    def _rerank(self, chunks: list[RetrievedChunk], top_k: int, query_terms: list[str]) -> list[RetrievedChunk]:
         if not chunks:
             return []
 
-        query_terms = self._extract_query_terms(question)
         if not query_terms:
             return chunks[:top_k]
 
@@ -125,3 +148,15 @@ class RetrievalService:
 
         combined = ascii_terms | cjk_terms
         return sorted(combined, key=lambda item: (-len(item), item))
+
+    def _summarize_chunks(self, chunks: list[RetrievedChunk]) -> list[dict[str, object]]:
+        preview: list[dict[str, object]] = []
+        for chunk in chunks[:8]:
+            preview.append(
+                {
+                    "file": chunk.file,
+                    "chunk": chunk.chunk,
+                    "score": round(float(chunk.score or 0.0), 4),
+                }
+            )
+        return preview
