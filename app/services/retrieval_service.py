@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 
 from app.adapters.embedding_client import EmbeddingClient
@@ -7,6 +8,30 @@ from app.domain.schemas.rag import RetrievedChunk
 
 
 class RetrievalService:
+    _candidate_multiplier = 4
+    _candidate_floor = 12
+    _candidate_cap = 24
+    _question_stop_terms = {
+        "請問",
+        "什麼",
+        "時候",
+        "何時",
+        "在哪",
+        "哪裡",
+        "放在",
+        "放哪",
+        "是不是",
+        "是否",
+        "有沒有",
+        "內容",
+        "資料",
+        "做的",
+        "的是",
+    }
+    _question_split_pattern = re.compile(
+        r"請問|什麼時候|何時|在哪裡|在哪|放在哪裡|放哪裡|放在哪|是不是|是否|有沒有|做的|的是|的|是|了|嗎"
+    )
+
     def __init__(
         self,
         embedding_client: EmbeddingClient | None = None,
@@ -33,4 +58,70 @@ class RetrievalService:
     def retrieve(self, question: str, top_k: int | None = None) -> list[RetrievedChunk]:
         effective_top_k = top_k or settings.rag_top_k
         query_embedding = self.embedding_client.embed(question)
-        return self.vector_store.query(query_embedding, effective_top_k)
+        candidate_k = min(
+            max(effective_top_k * self._candidate_multiplier, self._candidate_floor),
+            self._candidate_cap,
+        )
+        candidates = self.vector_store.query(query_embedding, max(effective_top_k, candidate_k))
+        return self._rerank(question=question, chunks=candidates, top_k=effective_top_k)
+
+    def _rerank(self, question: str, chunks: list[RetrievedChunk], top_k: int) -> list[RetrievedChunk]:
+        if not chunks:
+            return []
+
+        query_terms = self._extract_query_terms(question)
+        if not query_terms:
+            return chunks[:top_k]
+
+        ranked = sorted(
+            chunks,
+            key=lambda chunk: self._score_chunk(chunk, query_terms),
+            reverse=True,
+        )
+        return ranked[:top_k]
+
+    def _score_chunk(self, chunk: RetrievedChunk, query_terms: list[str]) -> tuple[float, float]:
+        haystack = f"{chunk.file}\n{chunk.relative_path}\n{chunk.content}".lower()
+        file_haystack = f"{chunk.file}\n{chunk.relative_path}".lower()
+        keyword_score = 0.0
+
+        for term in query_terms:
+            lowered = term.lower()
+            length_bonus = min(len(term), 6)
+            if lowered in file_haystack:
+                keyword_score += 8.0 + length_bonus
+            if lowered in haystack:
+                occurrences = haystack.count(lowered)
+                keyword_score += 2.0 + min(occurrences, 3) * (1.0 + length_bonus * 0.2)
+
+        semantic_score = float(chunk.score or 0.0)
+        return (keyword_score, semantic_score)
+
+    def _extract_query_terms(self, question: str) -> list[str]:
+        normalized = question.strip().lower()
+        if not normalized:
+            return []
+
+        ascii_terms = {
+            match.group(0)
+            for match in re.finditer(r"[a-z0-9][a-z0-9._:-]{1,}", normalized)
+        }
+
+        cjk_terms: set[str] = set()
+        compact = re.sub(r"\s+", "", normalized)
+        for match in re.finditer(r"[\u4e00-\u9fff0-9]{2,}", compact):
+            token = match.group(0)
+            pieces = [piece for piece in self._question_split_pattern.split(token) if len(piece) >= 2]
+            for piece in pieces:
+                if piece in self._question_stop_terms:
+                    continue
+                cjk_terms.add(piece)
+                max_size = min(6, len(piece))
+                for size in range(2, max_size + 1):
+                    for start in range(0, len(piece) - size + 1):
+                        subpiece = piece[start : start + size]
+                        if subpiece not in self._question_stop_terms:
+                            cjk_terms.add(subpiece)
+
+        combined = ascii_terms | cjk_terms
+        return sorted(combined, key=lambda item: (-len(item), item))
